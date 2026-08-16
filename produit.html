@@ -137,9 +137,16 @@
 
             try {
                 const nouveauSolde = balance - prix;
+                const now = Date.now(); // Date exacte de l'achat
+
                 await fetch(`${DB_URL}/${userPhone}.json`, {
                     method: 'PATCH',
-                    body: JSON.stringify({ balance: nouveauSolde, vipActive: id, totalInvested: prix })
+                    body: JSON.stringify({ 
+                        balance: nouveauSolde, 
+                        vipActive: id, 
+                        totalInvested: prix,
+                        lastHarvest: now // Enregistre le départ du chrono 24h
+                    })
                 });
 
                 const userRes = await fetch(`${DB_URL}/${userPhone}.json`);
@@ -159,7 +166,7 @@
                     }
                 }
 
-                alert("Achat réussi ! Vos revenus sont activés.");
+                alert("Achat réussi ! Votre premier cycle de 24h a démarré.");
                 location.reload();
             } catch (e) { alert("Erreur lors de la transaction."); }
         }
