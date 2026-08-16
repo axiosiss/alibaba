@@ -38,8 +38,8 @@
     </div>
 
     <div id="myInvestmentSection" class="hidden px-4 mt-6">
-        <h2 class="text-xs font-black uppercase text-slate-400 mb-3 ml-1 italic border-l-4 border-[#ff6a00] pl-2">Mon équipement loué</h2>
-        <div id="activeVipDisplay"></div>
+        <h2 class="text-xs font-black uppercase text-slate-400 mb-3 ml-1 italic border-l-4 border-[#ff6a00] pl-2">Mes équipements loués</h2>
+        <div id="activeVipDisplay" class="space-y-3"></div>
     </div>
 
     <div id="vipList" class="px-4 mt-6 space-y-4"></div>
@@ -86,16 +86,33 @@
             if (!userPhone) return window.location.href = "index.html";
             const res = await fetch(`${DB_URL}/${userPhone}.json`);
             const data = await res.json();
-            document.getElementById('userBalance').innerText = `FC ${data.balance.toLocaleString()}`;
-            document.getElementById('userVipCount').innerText = data.vipActive ? "1" : "0";
-            renderProducts(data.balance, data.vipActive);
+            
+            // Nouveau système : on lit le dossier investissements
+            const investments = data.investissements || {};
+            const vipCount = Object.keys(investments).length;
+            
+            document.getElementById('userBalance').innerText = `FC ${(data.balance || 0).toLocaleString()}`;
+            document.getElementById('userVipCount').innerText = vipCount;
+            
+            renderProducts(data.balance || 0, investments);
         }
 
-        function renderProducts(currentBalance, activeVipId) {
+        function renderProducts(currentBalance, investments) {
             const list = document.getElementById('vipList');
-            list.innerHTML = vips.map(v => `
+            
+            // Compter combien de fois chaque VIP est possédé
+            const ownedVipsCount = {};
+            Object.values(investments).forEach(inv => {
+                ownedVipsCount[inv.vipId] = (ownedVipsCount[inv.vipId] || 0) + 1;
+            });
+
+            list.innerHTML = vips.map(v => {
+                const count = ownedVipsCount[v.id] || 0;
+                const badge = count > 0 ? `<span class="active-badge italic">POSSÉDÉ (x${count})</span>` : '';
+                
+                return `
                 <div class="card-vip p-3 flex gap-4 items-center shadow-md relative">
-                    ${activeVipId == v.id ? '<span class="active-badge italic">POSSÉDÉ</span>' : ''}
+                    ${badge}
                     <div class="w-1/3 h-24 overflow-hidden rounded-lg">
                         <img src="${v.img}" class="w-full h-full object-cover">
                     </div>
@@ -103,55 +120,64 @@
                         <h3 class="text-sm font-black text-[#ff6a00] uppercase italic">VIP ${v.id}</h3>
                         <p class="text-[10px] font-bold text-slate-700">Prix: FC ${v.prix.toLocaleString()}</p>
                         <p class="text-[10px] font-bold text-orange-600">Gain/Jour: FC ${v.jour.toLocaleString()}</p>
-                        <button onclick="validerAchat(${v.id}, ${v.prix}, ${currentBalance})" 
-                                ${activeVipId == v.id ? 'disabled' : ''}
-                                class="btn-buy mt-2 w-full py-2 text-[10px] uppercase ${activeVipId == v.id ? 'opacity-30' : ''}">
-                            ${activeVipId == v.id ? 'Déjà acquis' : 'Acheter'}
+                        <button onclick="validerAchat(${v.id}, ${v.prix})" class="btn-buy mt-2 w-full py-2 text-[10px] uppercase">
+                            Acheter
                         </button>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
 
-            if (activeVipId) {
-                const myVip = vips.find(v => v.id == activeVipId);
-                if (myVip) {
-                    const section = document.getElementById('myInvestmentSection');
-                    section.classList.remove('hidden');
-                    document.getElementById('activeVipDisplay').innerHTML = `
+            // Affichage des VIP achetés en haut
+            const invArray = Object.values(investments);
+            if (invArray.length > 0) {
+                const section = document.getElementById('myInvestmentSection');
+                section.classList.remove('hidden');
+                
+                document.getElementById('activeVipDisplay').innerHTML = invArray.map(inv => {
+                    const myVip = vips.find(v => v.id == inv.vipId);
+                    return `
                         <div class="bg-slate-900 p-4 rounded-2xl flex items-center gap-4 text-white shadow-xl">
                             <img src="${myVip.img}" class="w-16 h-16 rounded-xl object-cover border-2 border-green-500">
                             <div>
-                                <p class="text-[10px] font-black text-green-400 uppercase tracking-tighter">Équipement Actif</p>
-                                <h3 class="text-lg font-black italic">VIP ${myVip.id}</h3>
+                                <h3 class="text-lg font-black italic text-green-400">VIP ${myVip.id}</h3>
                                 <p class="text-[10px] opacity-80 font-bold italic">Production : FC ${myVip.jour.toLocaleString()} / jour</p>
                             </div>
                         </div>
                     `;
-                }
+                }).join('');
             }
         }
 
-        async function validerAchat(id, prix, balance) {
+        async function validerAchat(id, prix) {
+            // On récupère le solde à la seconde de l'achat pour éviter les erreurs
+            const res = await fetch(`${DB_URL}/${userPhone}.json`);
+            const user = await res.json();
+            const balance = user.balance || 0;
+
             if (balance < prix) return alert("Solde insuffisant ! Veuillez recharger votre compte.");
             if (!confirm(`Confirmer l'achat du VIP ${id} pour FC ${prix.toLocaleString()} ?`)) return;
 
             try {
+                const now = Date.now(); 
+                const invId = "inv_" + now; // Identifiant unique pour cet achat
                 const nouveauSolde = balance - prix;
-                const now = Date.now(); // Date exacte de l'achat
+
+                // On prépare les données à envoyer
+                const updates = {
+                    balance: nouveauSolde,
+                    [`investissements/${invId}`]: {
+                        vipId: id,
+                        lastHarvest: now // Départ du chrono pour CE produit
+                    }
+                };
 
                 await fetch(`${DB_URL}/${userPhone}.json`, {
                     method: 'PATCH',
-                    body: JSON.stringify({ 
-                        balance: nouveauSolde, 
-                        vipActive: id, 
-                        totalInvested: prix,
-                        lastHarvest: now // Enregistre le départ du chrono 24h
-                    })
+                    body: JSON.stringify(updates)
                 });
 
-                const userRes = await fetch(`${DB_URL}/${userPhone}.json`);
-                const user = await userRes.json();
-                
+                // Commissions
                 if (user.referredBy && user.referredBy !== "DIRECT") {
                     await distribuerCommission(user.referredBy, prix * 0.35);
                     const p1Res = await fetch(`${DB_URL}/${user.referredBy}.json`);
@@ -166,7 +192,7 @@
                     }
                 }
 
-                alert("Achat réussi ! Votre premier cycle de 24h a démarré.");
+                alert("Achat réussi ! Votre cycle de 24h a démarré pour ce produit.");
                 location.reload();
             } catch (e) { alert("Erreur lors de la transaction."); }
         }
