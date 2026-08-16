@@ -27,7 +27,7 @@
             <input type="tel" id="phone" placeholder="Numéro (ex: +243984874123)" pattern="^\+243[0-9]{9}$" required>
             <input type="password" id="pass" placeholder="Mot de passe (min 6 car.)" minlength="6" required>
             <input type="password" id="confirm_pass" placeholder="Confirmer le mot de passe" required>
-            <input type="text" id="inviteCode" placeholder="Code d'invitation (Optionnel)">
+            <input type="text" id="inviteCode" placeholder="Code d'invitation (Optionnel)" maxlength="6">
             <button type="submit" id="submitBtn">S'inscrire</button>
         </form>
 
@@ -39,13 +39,13 @@
     <script>
         const DB_URL = "https://alibaba-f22a0-default-rtdb.firebaseio.com/users";
 
-        // DETECTION DIRECTE DU CODE DE PARRAINAGE (Converti automatiquement en minuscules)
+        // DETECTION DIRECTE DU CODE DE PARRAINAGE (Forcé en 6 lettres minuscules)
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             const code = params.get('c');
             if (code) {
                 const inviteField = document.getElementById('inviteCode');
-                inviteField.value = code.toLowerCase();
+                inviteField.value = code.toLowerCase().trim().substring(0, 6);
                 inviteField.readOnly = true;
                 inviteField.style.backgroundColor = "#fff7f2";
             }
@@ -54,11 +54,11 @@
         document.getElementById('regForm').onsubmit = async function(e) {
             e.preventDefault();
             const btn = document.getElementById('submitBtn');
-            const phone = document.getElementById('phone'].value.replace('+', '').trim();
+            const phone = document.getElementById('phone').value.replace('+', '').trim();
             const pass = document.getElementById('pass').value;
             const confirm = document.getElementById('confirm_pass').value;
-            // Forçage du code d'invitation en minuscules lors de l'enregistrement
-            const inviteCode = document.getElementById('inviteCode').value.toLowerCase().trim();
+            // Code d'invitation strictement en 6 lettres minuscules
+            const inviteCode = document.getElementById('inviteCode').value.toLowerCase().trim().substring(0, 6);
 
             if (pass !== confirm) {
                 alert("Les mots de passe ne sont pas identiques !");
@@ -76,7 +76,7 @@
                 if (existing) {
                     alert("Ce numéro est déjà utilisé !");
                 } else {
-                    // Création de l'utilisateur avec système de parrainage en minuscules
+                    // Création de l'utilisateur avec le code d'invitation en 6 lettres minuscules
                     const userData = {
                         username: document.getElementById('username').value,
                         phone: phone,
