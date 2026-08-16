@@ -57,40 +57,52 @@
             try {
                 let dataRec = {};
                 let dataRet = {};
+                let dataRecHistory = {};
+                let dataRetHistory = {};
 
-                // 1. Récupérer Recharges en toute sécurité
+                // 1. Récupérer Recharges en attente
                 try {
                     const resRec = await fetch(`${DB_URL}/recharges_en_attente.json`);
                     dataRec = await resRec.json() || {};
-                } catch(e) { console.log("Pas de recharges trouvées"); }
+                } catch(e) { console.log("Pas de recharges en attente"); }
                 
-                // 2. Récupérer Retraits en toute sécurité
+                // 2. Récupérer Retraits en attente
                 try {
                     const resRet = await fetch(`${DB_URL}/retraits_en_attente.json`);
                     dataRet = await resRet.json() || {};
-                } catch(e) { console.log("Pas de retraits trouvés"); }
+                } catch(e) { console.log("Pas de retraits en attente"); }
+
+                // 3. Récupérer Recharges historiques/validées (si le dossier existe)
+                try {
+                    const resRecH = await fetch(`${DB_URL}/recharges_historique.json`);
+                    dataRecHistory = await resRecH.json() || {};
+                } catch(e) { console.log("Pas d'historique de recharges"); }
+
+                // 4. Récupérer Retraits historiques/validés (si le dossier existe)
+                try {
+                    const resRetH = await fetch(`${DB_URL}/retraits_historique.json`);
+                    dataRetHistory = await resRetH.json() || {};
+                } catch(e) { console.log("Pas d'historique de retraits"); }
 
                 allRecords = [];
 
-                // Filtrer et structurer les recharges
-                if (dataRec) {
-                    Object.keys(dataRec).forEach(key => {
-                        const item = dataRec[key];
-                        if (item.userAccount === loggedUserPhone || item.user === loggedUserPhone || item.phone === loggedUserPhone) {
-                            allRecords.push({ ...item, type: 'recharge', id: key });
-                        }
-                    });
-                }
+                // Fonction d'aide pour pousser les données filtrées par numéro utilisateur
+                const appendRecords = (dataSource, typeTrans) => {
+                    if (dataSource) {
+                        Object.keys(dataSource).forEach(key => {
+                            const item = dataSource[key];
+                            const phoneField = item.userAccount || item.user || item.phone;
+                            if (phoneField === loggedUserPhone) {
+                                allRecords.push({ ...item, type: typeTrans, id: key });
+                            }
+                        });
+                    }
+                };
 
-                // Filtrer et structurer les retraits
-                if (dataRet) {
-                    Object.keys(dataRet).forEach(key => {
-                        const item = dataRet[key];
-                        if (item.user === loggedUserPhone || item.userAccount === loggedUserPhone || item.phone === loggedUserPhone) {
-                            allRecords.push({ ...item, type: 'retrait', id: key });
-                        }
-                    });
-                }
+                appendRecords(dataRec, 'recharge');
+                appendRecords(dataRet, 'retrait');
+                appendRecords(dataRecHistory, 'recharge');
+                appendRecords(dataRetHistory, 'retrait');
 
                 // Trier par date (plus récent en haut)
                 allRecords.sort((a, b) => {
@@ -126,14 +138,18 @@
                 const statusStr = (rec.status || 'En attente').toLowerCase();
                 
                 let statusClass = 'status-pending';
-                if (statusStr.includes('validé') || statusStr.includes('succès')) statusClass = 'status-success';
-                else if (statusStr.includes('refusé') || statusStr.includes('échec')) statusClass = 'status-failed';
+                if (statusStr.includes('validé') || statusStr.includes('succès') || statusStr.includes('approuvé')) {
+                    statusClass = 'status-success';
+                } else if (statusStr.includes('refusé') || statusStr.includes('échec') || statusStr.includes('rejeté')) {
+                    statusClass = 'status-failed';
+                }
 
                 const icon = isRecharge ? 'fa-arrow-down-long text-green-500' : 'fa-arrow-up-long text-red-500';
                 const amountPrefix = isRecharge ? '+' : '-';
                 
-                // Sécurité pour formater le montant (évite le plantage si c'est du texte)
-                const montantFormatte = (parseFloat(rec.amount) || 0).toLocaleString();
+                // Récupération sécurisée du montant (prend en compte .amount ou .montant)
+                const rawAmount = rec.amount !== undefined ? rec.amount : rec.montant;
+                const montantFormatte = (parseFloat(rawAmount) || 0).toLocaleString();
                 const dateAffichee = rec.date ? rec.date : "Date non spécifiée";
                 const statusAffiche = rec.status ? rec.status : "En attente";
 
