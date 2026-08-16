@@ -78,8 +78,17 @@
                     const vipInfo = vipsData[vipId] || { jour: 0, img: "IMG_3923.jpeg" };
                     const gain = vipInfo.jour;
                     const img = vipInfo.img;
-                    const lastCollect = user.lastHarvest || 0; // Heure de la dernière récolte (ou achat)
-                    
+
+                    // Si lastHarvest n'existe pas, on met la date actuelle par défaut
+                    let lastCollect = user.lastHarvest;
+                    if (!lastCollect) {
+                        lastCollect = Date.now();
+                        await fetch(`${DB_URL}/${userPhone}.json`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ lastHarvest: lastCollect })
+                        });
+                    }
+
                     document.getElementById('profitDisplay').innerText = `FC ${gain.toLocaleString()}`;
                     renderCard(vipId, gain, lastCollect, img);
                 } else {
@@ -137,8 +146,7 @@
                     const s = Math.floor((remaining % 60000) / 1000);
                     btn.innerText = `Prochain profit : ${h}h ${m}m ${s}s`;
                     
-                    // Remplissage de la barre
-                    const percent = (elapsed / cycle) * 100;
+                    const percent = Math.min((elapsed / cycle) * 100, 100);
                     bar.style.width = percent + "%";
                     setTimeout(update, 1000);
                 }
@@ -155,7 +163,6 @@
                 const res = await fetch(`${DB_URL}/${userPhone}.json`);
                 const user = await res.json();
                 
-                // DOUBLE SÉCURITÉ : On revérifie le temps côté base de données
                 const now = Date.now();
                 if (user.lastHarvest && (now - user.lastHarvest < 24 * 60 * 60 * 1000)) {
                     alert("Erreur de synchronisation. Revenez plus tard.");
@@ -164,12 +171,12 @@
 
                 const nouveauSolde = (parseFloat(user.balance) || 0) + montant;
 
-                // Mise à jour du solde ET de la date de récolte (lastHarvest)
+                // Mise à jour du solde ET réinitialisation du chrono de 24h
                 await fetch(`${DB_URL}/${userPhone}.json`, {
                     method: 'PATCH',
                     body: JSON.stringify({ 
                         balance: nouveauSolde,
-                        lastHarvest: now // On redémarre le chrono de 24h ici
+                        lastHarvest: now 
                     })
                 });
 
