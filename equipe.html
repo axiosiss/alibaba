@@ -135,8 +135,9 @@
         async function loadTeamData() {
             if (!userPhone) return window.location.href = "index.html";
 
-            // Génération d'un code de 6 lettres minuscules basé sur le numéro stocké
-            const myCode = userPhone.substring(userPhone.length - 6).toLowerCase();
+            // Code d'invitation strictement de 6 caractères et en minuscules
+            const cleanPhone = userPhone.replace(/\D/g, '');
+            const myCode = cleanPhone.substring(cleanPhone.length - 6).toLowerCase();
             document.getElementById('inviteCode').innerText = myCode;
             document.getElementById('inviteLink').innerText = `${baseUrl}?c=${myCode}`;
 
@@ -150,19 +151,21 @@
                     const usersArray = Object.values(allUsers);
 
                     usersArray.forEach(u => {
-                        if (u.referredBy && u.referredBy.toLowerCase() === myCode) {
+                        if (u.referredBy && u.referredBy.toLowerCase().trim() === myCode) {
                             lv1++;
                             comLV1 += (u.totalInvested || 0) * 0.35;
                             
-                            const uCode = u.phone.substring(u.phone.length - 6).toLowerCase();
+                            const uCleanPhone = (u.phone || '').replace(/\D/g, '');
+                            const uCode = uCleanPhone.substring(uCleanPhone.length - 6).toLowerCase();
                             usersArray.forEach(subU => {
-                                if (subU.referredBy && subU.referredBy.toLowerCase() === uCode) {
+                                if (subU.referredBy && subU.referredBy.toLowerCase().trim() === uCode) {
                                     lv2++;
                                     comLV2 += (subU.totalInvested || 0) * 0.02;
 
-                                    const subUCode = subU.phone.substring(subU.phone.length - 6).toLowerCase();
+                                    const subUCleanPhone = (subU.phone || '').replace(/\D/g, '');
+                                    const subUCode = subUCleanPhone.substring(subUCleanPhone.length - 6).toLowerCase();
                                     usersArray.forEach(lastU => {
-                                        if (lastU.referredBy && lastU.referredBy.toLowerCase() === subUCode) {
+                                        if (lastU.referredBy && lastU.referredBy.toLowerCase().trim() === subUCode) {
                                             lv3++;
                                             comLV3 += (lastU.totalInvested || 0) * 0.01;
                                         }
