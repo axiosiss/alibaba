@@ -27,8 +27,8 @@
     <div class="px-5 mt-6">
         <div class="bg-[#ff6a00] p-6 rounded-[2rem] text-white shadow-xl flex justify-between items-center">
             <div>
-                <p class="text-[10px] uppercase font-bold opacity-80">Revenu Journalier</p>
-                <p id="profitDisplay" class="text-2xl font-black">FC 0.00</p>
+                <p class="text-[10px] uppercase font-bold opacity-80">Revenu Journalier Total</p>
+                <p id="profitDisplay" class="text-2xl font-black">FC 0</p>
             </div>
             <i class="fa-solid fa-clock-rotate-left text-4xl opacity-30"></i>
         </div>
@@ -36,7 +36,7 @@
 
     <div id="activeProductsContainer" class="px-5 mt-8 space-y-5">
         <div id="emptyMessage" class="text-center py-24">
-            <p class="text-slate-400 font-bold text-sm">Chargement de votre investissement...</p>
+            <p class="text-slate-400 font-bold text-sm">Chargement de vos investissements...</p>
         </div>
     </div>
 
@@ -72,41 +72,39 @@
             try {
                 const res = await fetch(`${DB_URL}/${userPhone}.json`);
                 const user = await res.json();
+                const investments = user.investissements || {};
 
-                if (user && user.vipActive) {
-                    const vipId = user.vipActive;
-                    const vipInfo = vipsData[vipId] || { jour: 0, img: "IMG_3923.jpeg" };
-                    const gain = vipInfo.jour;
-                    const img = vipInfo.img;
+                if (Object.keys(investments).length > 0) {
+                    const container = document.getElementById('activeProductsContainer');
+                    container.innerHTML = ''; // On vide le chargement
+                    let totalJournalier = 0;
 
-                    // Si lastHarvest n'existe pas, on met la date actuelle par défaut
-                    let lastCollect = user.lastHarvest;
-                    if (!lastCollect) {
-                        lastCollect = Date.now();
-                        await fetch(`${DB_URL}/${userPhone}.json`, {
-                            method: 'PATCH',
-                            body: JSON.stringify({ lastHarvest: lastCollect })
-                        });
+                    for (const [invId, invData] of Object.entries(investments)) {
+                        const vipInfo = vipsData[invData.vipId] || { jour: 0, img: "IMG_3923.jpeg" };
+                        totalJournalier += vipInfo.jour;
+                        
+                        renderCard(invId, invData.vipId, vipInfo.jour, invData.lastHarvest, vipInfo.img);
                     }
 
-                    document.getElementById('profitDisplay').innerText = `FC ${gain.toLocaleString()}`;
-                    renderCard(vipId, gain, lastCollect, img);
+                    document.getElementById('profitDisplay').innerText = `FC ${totalJournalier.toLocaleString()}`;
                 } else {
                     showEmpty();
                 }
             } catch (e) { console.error(e); }
         }
 
-        function renderCard(id, gain, lastTime, img) {
+        function renderCard(invId, vipId, gain, lastTime, img) {
             const container = document.getElementById('activeProductsContainer');
-            container.innerHTML = `
+            
+            // On ajoute chaque carte à la suite
+            container.innerHTML += `
                 <div class="card-active p-5">
                     <div class="flex items-center gap-4 mb-4">
                         <img src="${img}" class="w-16 h-16 rounded-xl object-cover border border-orange-200 shadow-sm">
                         <div class="flex-1 flex justify-between items-start">
                             <div>
-                                <h3 class="text-sm font-black text-slate-800 uppercase italic">Pack VIP ${id}</h3>
-                                <p id="statusText" class="text-[10px] font-bold uppercase mt-1 italic text-orange-500">Production en cours...</p>
+                                <h3 class="text-sm font-black text-slate-800 uppercase italic">Pack VIP ${vipId}</h3>
+                                <p id="status_${invId}" class="text-[10px] font-bold uppercase mt-1 italic text-orange-500">Production en cours...</p>
                             </div>
                             <div class="text-right">
                                 <p class="text-xs font-black text-[#ff6a00]">FC ${gain.toLocaleString()}</p>
@@ -114,22 +112,26 @@
                             </div>
                         </div>
                     </div>
-                    <div class="progress-bar mb-4"><div id="pBar" class="progress-fill"></div></div>
-                    <button id="btnCollect" onclick="collecterGains(${gain})" disabled class="btn-collect w-full py-4 text-xs font-black uppercase tracking-widest shadow-md">
+                    <div class="progress-bar mb-4"><div id="bar_${invId}" class="progress-fill"></div></div>
+                    <button id="btn_${invId}" onclick="collecterGains('${invId}', ${gain})" disabled class="btn-collect w-full py-4 text-xs font-black uppercase tracking-widest shadow-md">
                         Attendez 24h
                     </button>
                 </div>
             `;
-            startCountdown(lastTime);
+            
+            // On lance le chrono spécifiquement pour cette carte
+            setTimeout(() => startCountdown(invId, lastTime), 100);
         }
 
-        function startCountdown(lastTime) {
-            const btn = document.getElementById('btnCollect');
-            const status = document.getElementById('statusText');
-            const bar = document.getElementById('pBar');
-            const cycle = 24 * 60 * 60 * 1000; // 24 heures en millisecondes
+        function startCountdown(invId, lastTime) {
+            const btn = document.getElementById(`btn_${invId}`);
+            const status = document.getElementById(`status_${invId}`);
+            const bar = document.getElementById(`bar_${invId}`);
+            const cycle = 24 * 60 * 60 * 1000; 
 
             const update = () => {
+                if(!btn) return; // Sécurité si la page a changé
+                
                 const now = Date.now();
                 const elapsed = now - lastTime;
                 const remaining = cycle - elapsed;
@@ -154,9 +156,9 @@
             update();
         }
 
-        async function collecterGains(montant) {
+        async function collecterGains(invId, montant) {
             try {
-                const btn = document.getElementById('btnCollect');
+                const btn = document.getElementById(`btn_${invId}`);
                 btn.disabled = true;
                 btn.innerText = "Traitement...";
 
@@ -164,20 +166,25 @@
                 const user = await res.json();
                 
                 const now = Date.now();
-                if (user.lastHarvest && (now - user.lastHarvest < 24 * 60 * 60 * 1000)) {
+                const investment = user.investissements[invId];
+
+                // Vérification anti-triche
+                if (investment.lastHarvest && (now - investment.lastHarvest < 24 * 60 * 60 * 1000)) {
                     alert("Erreur de synchronisation. Revenez plus tard.");
                     return location.reload();
                 }
 
                 const nouveauSolde = (parseFloat(user.balance) || 0) + montant;
 
-                // Mise à jour du solde ET réinitialisation du chrono de 24h
+                // Mise à jour du solde ET du chrono uniquement pour CET investissement
+                const updates = {
+                    balance: nouveauSolde,
+                    [`investissements/${invId}/lastHarvest`]: now 
+                };
+
                 await fetch(`${DB_URL}/${userPhone}.json`, {
                     method: 'PATCH',
-                    body: JSON.stringify({ 
-                        balance: nouveauSolde,
-                        lastHarvest: now 
-                    })
+                    body: JSON.stringify(updates)
                 });
 
                 alert(`Félicitations ! FC ${montant.toLocaleString()} collectés.`);
