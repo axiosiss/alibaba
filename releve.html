@@ -27,8 +27,8 @@
 
     <div class="bg-white flex justify-around border-b border-slate-100 sticky top-[73px] z-40">
         <button onclick="filterRecords('all', this)" class="tab-btn active px-4 py-4 text-[10px] uppercase tracking-wider">Tout</button>
-        <button onclick="filterRecords('recharge', this)" class="tab-btn px-4 py-4 text-[10px] uppercase tracking-wider">Recharges</button>
-        <button onclick="filterRecords('retrait', this)" class="tab-btn px-4 py-4 text-[10px] uppercase tracking-wider">Retraits</button>
+        <button onclick="filterRecords('recharges', this)" class="tab-btn px-4 py-4 text-[10px] uppercase tracking-wider">Recharges</button>
+        <button onclick="filterRecords('retraits', this)" class="tab-btn px-4 py-4 text-[10px] uppercase tracking-wider">Retraits</button>
     </div>
 
     <div class="p-5">
@@ -46,68 +46,55 @@
     </div>
 
     <script>
-        const DB_URL = "https://alibaba-f22a0-default-rtdb.firebaseio.com";
+        const BASE_URL = "https://alibaba-f22a0-default-rtdb.firebaseio.com";
         const loggedUserPhone = localStorage.getItem('userPhone');
         
         let allRecords = [];
 
         async function fetchAllHistory() {
-            if (!loggedUserPhone) return window.location.href = "index.html";
+            if (!loggedUserPhone) {
+                window.location.href = "index.html";
+                return;
+            }
+
+            const cleanLoggedPhone = loggedUserPhone.toString().replace('+', '').trim();
 
             try {
-                let dataRec = {};
-                let dataRet = {};
-                let dataRecHistory = {};
-                let dataRetHistory = {};
+                // Récupération identique à la page admin dans les dossiers "recharges" et "retraits"
+                const [resRec, resRet] = await Promise.all([
+                    fetch(`${BASE_URL}/recharges.json`),
+                    fetch(`${BASE_URL}/retraits.json`)
+                ]);
 
-                // 1. Récupérer Recharges en attente
-                try {
-                    const resRec = await fetch(`${DB_URL}/recharges_en_attente.json`);
-                    dataRec = await resRec.json() || {};
-                } catch(e) { console.log("Pas de recharges en attente"); }
-                
-                // 2. Récupérer Retraits en attente
-                try {
-                    const resRet = await fetch(`${DB_URL}/retraits_en_attente.json`);
-                    dataRet = await resRet.json() || {};
-                } catch(e) { console.log("Pas de retraits en attente"); }
-
-                // 3. Récupérer Recharges historiques/validées (si le dossier existe)
-                try {
-                    const resRecH = await fetch(`${DB_URL}/recharges_historique.json`);
-                    dataRecHistory = await resRecH.json() || {};
-                } catch(e) { console.log("Pas d'historique de recharges"); }
-
-                // 4. Récupérer Retraits historiques/validés (si le dossier existe)
-                try {
-                    const resRetH = await fetch(`${DB_URL}/retraits_historique.json`);
-                    dataRetHistory = await resRetH.json() || {};
-                } catch(e) { console.log("Pas d'historique de retraits"); }
+                const dataRec = await resRec.json() || {};
+                const dataRet = await resRet.json() || {};
 
                 allRecords = [];
 
-                // Fonction d'aide pour pousser les données filtrées par numéro utilisateur
-                const appendRecords = (dataSource, typeTrans) => {
-                    if (dataSource) {
-                        Object.keys(dataSource).forEach(key => {
-                            const item = dataSource[key];
-                            const phoneField = item.userAccount || item.user || item.phone;
-                            if (phoneField === loggedUserPhone) {
-                                allRecords.push({ ...item, type: typeTrans, id: key });
-                            }
-                        });
-                    }
-                };
+                if (dataRec) {
+                    Object.keys(dataRec).forEach(id => {
+                        const req = dataRec[id];
+                        const phoneField = (req.phone || "").toString().replace('+', '').trim();
+                        if (phoneField === cleanLoggedPhone) {
+                            allRecords.push({ ...req, type: 'recharges', id: id });
+                        }
+                    });
+                }
 
-                appendRecords(dataRec, 'recharge');
-                appendRecords(dataRet, 'retrait');
-                appendRecords(dataRecHistory, 'recharge');
-                appendRecords(dataRetHistory, 'retrait');
+                if (dataRet) {
+                    Object.keys(dataRet).forEach(id => {
+                        const req = dataRet[id];
+                        const phoneField = (req.phone || "").toString().replace('+', '').trim();
+                        if (phoneField === cleanLoggedPhone) {
+                            allRecords.push({ ...req, type: 'retraits', id: id });
+                        }
+                    });
+                }
 
-                // Trier par date (plus récent en haut)
+                // Trier par date du plus récent au plus ancien
                 allRecords.sort((a, b) => {
-                    const dateA = new Date(a.date).getTime() || 0;
-                    const dateB = new Date(b.date).getTime() || 0;
+                    const dateA = new Date(a.date || 0).getTime();
+                    const dateB = new Date(b.date || 0).getTime();
                     return dateB - dateA;
                 });
 
@@ -133,9 +120,9 @@
             msg.classList.add('hidden');
             container.classList.remove('hidden');
 
-            container.innerHTML = records.map(rec => {
-                const isRecharge = rec.type === 'recharge';
-                const statusStr = (rec.status || 'En attente').toLowerCase();
+            container.innerHTML = records.map(req => {
+                const isRecharge = req.type === 'recharges';
+                const statusStr = (req.status || 'En attente').toLowerCase();
                 
                 let statusClass = 'status-pending';
                 if (statusStr.includes('validé') || statusStr.includes('succès') || statusStr.includes('approuvé')) {
@@ -147,11 +134,9 @@
                 const icon = isRecharge ? 'fa-arrow-down-long text-green-500' : 'fa-arrow-up-long text-red-500';
                 const amountPrefix = isRecharge ? '+' : '-';
                 
-                // Récupération sécurisée du montant (prend en compte .amount ou .montant)
-                const rawAmount = rec.amount !== undefined ? rec.amount : rec.montant;
-                const montantFormatte = (parseFloat(rawAmount) || 0).toLocaleString();
-                const dateAffichee = rec.date ? rec.date : "Date non spécifiée";
-                const statusAffiche = rec.status ? rec.status : "En attente";
+                const montantFormatte = (parseFloat(req.montant) || 0).toLocaleString();
+                const dateAffichee = req.date ? req.date : "Date non spécifiée";
+                const statusAffiche = req.status ? req.status : "En attente";
 
                 return `
                     <div class="releve-card p-4 flex items-center justify-between border-l-4 ${isRecharge ? 'border-l-green-400' : 'border-l-red-400'}">
