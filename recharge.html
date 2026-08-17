@@ -28,10 +28,6 @@
     <div class="p-5">
         <p class="text-[11px] font-black text-slate-400 uppercase mb-3 tracking-widest">1. Choisissez un montant (VIP)</p>
         <div class="grid grid-cols-2 gap-3 mb-8">
-            <div class="amount-card p-3 rounded-xl text-center" onclick="selectAmount(this, 8000)">
-                <p class="text-[10px] font-bold text-slate-400 uppercase">VIP 1</p>
-                <p class="text-sm font-black text-slate-800">FC 8,000</p>
-            </div>
             <div class="amount-card p-3 rounded-xl text-center" onclick="selectAmount(this, 20000)">
                 <p class="text-[10px] font-bold text-slate-400 uppercase">VIP 2</p>
                 <p class="text-sm font-black text-slate-800">FC 20,000</p>
@@ -166,10 +162,9 @@
             btn.disabled = true;
             btn.innerText = "Envoi en cours...";
 
-            // STRUCTURE CORRIGÉE POUR L'ADMIN
             const rechargeData = {
-                phone: loggedUserPhone, // On utilise 'phone' pour l'admin
-                montant: parseFloat(selectedAmount), // On utilise 'montant' pour l'admin
+                phone: loggedUserPhone,
+                montant: parseFloat(selectedAmount),
                 reseau: selectedNetworkName,
                 transactionId: txId,
                 expediteur: senderPhone,
@@ -177,7 +172,6 @@
             };
 
             try {
-                // ENVOI VERS LE DOSSIER /recharges/ (le même que celui lu par l'admin)
                 await fetch(`${DB_URL}/recharges.json`, {
                     method: 'POST',
                     body: JSON.stringify(rechargeData)
