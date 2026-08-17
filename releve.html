@@ -60,38 +60,45 @@
             const cleanLoggedPhone = loggedUserPhone.toString().replace('+', '').trim();
 
             try {
-                // Récupération identique à la page admin dans les dossiers "recharges" et "retraits"
-                const [resRec, resRet] = await Promise.all([
+                // Interrogation simultanée des recharges et des deux nœuds de retraits
+                const [resRec, resRet, resRetAtt] = await Promise.all([
                     fetch(`${BASE_URL}/recharges.json`),
-                    fetch(`${BASE_URL}/retraits.json`)
+                    fetch(`${BASE_URL}/retraits.json`),
+                    fetch(`${BASE_URL}/retraits_en_attente.json`)
                 ]);
 
                 const dataRec = await resRec.json() || {};
                 const dataRet = await resRet.json() || {};
+                const dataRetAtt = await resRetAtt.json() || {};
+
+                // Fusion des retraits validés/rejetés et en attente
+                const mergedRetraits = { ...dataRet, ...dataRetAtt };
 
                 allRecords = [];
 
+                // Traitement des recharges
                 if (dataRec) {
                     Object.keys(dataRec).forEach(id => {
                         const req = dataRec[id];
-                        const phoneField = (req.phone || "").toString().replace('+', '').trim();
+                        const phoneField = (req.phone || req.user || req.userPhone || "").toString().replace('+', '').trim();
                         if (phoneField === cleanLoggedPhone) {
                             allRecords.push({ ...req, type: 'recharges', id: id });
                         }
                     });
                 }
 
-                if (dataRet) {
-                    Object.keys(dataRet).forEach(id => {
-                        const req = dataRet[id];
-                        const phoneField = (req.phone || "").toString().replace('+', '').trim();
+                // Traitement des retraits (lit 'user' et 'amount')
+                if (mergedRetraits) {
+                    Object.keys(mergedRetraits).forEach(id => {
+                        const req = mergedRetraits[id];
+                        const phoneField = (req.user || req.phone || req.userPhone || "").toString().replace('+', '').trim();
                         if (phoneField === cleanLoggedPhone) {
                             allRecords.push({ ...req, type: 'retraits', id: id });
                         }
                     });
                 }
 
-                // Trier par date du plus récent au plus ancien
+                // Tri par date du plus récent au plus ancien
                 allRecords.sort((a, b) => {
                     const dateA = new Date(a.date || 0).getTime();
                     const dateB = new Date(b.date || 0).getTime();
@@ -125,7 +132,7 @@
                 const statusStr = (req.status || 'En attente').toLowerCase();
                 
                 let statusClass = 'status-pending';
-                if (statusStr.includes('validé') || statusStr.includes('succès') || statusStr.includes('approuvé')) {
+                if (statusStr.includes('validé') || statusStr.includes('valide') || statusStr.includes('succès') || statusStr.includes('approuvé')) {
                     statusClass = 'status-success';
                 } else if (statusStr.includes('refusé') || statusStr.includes('échec') || statusStr.includes('rejeté')) {
                     statusClass = 'status-failed';
@@ -134,7 +141,9 @@
                 const icon = isRecharge ? 'fa-arrow-down-long text-green-500' : 'fa-arrow-up-long text-red-500';
                 const amountPrefix = isRecharge ? '+' : '-';
                 
-                const montantFormatte = (parseFloat(req.montant) || 0).toLocaleString();
+                // Récupération dynamique selon le nom du champ (amount ou montant)
+                const rawAmount = req.amount !== undefined ? req.amount : (req.montant !== undefined ? req.montant : 0);
+                const montantFormatte = (parseFloat(rawAmount) || 0).toLocaleString();
                 const dateAffichee = req.date ? req.date : "Date non spécifiée";
                 const statusAffiche = req.status ? req.status : "En attente";
 
